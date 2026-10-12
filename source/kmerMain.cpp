@@ -45,7 +45,7 @@ bool verifyInput(int argc, char** argv, uint64_t& k){
         return false;
     }else{
         ull kVal = std::stoull(argv[1]);
-        if(kVal > 0 && kVal <= 10){
+        if(kVal > 0 && kVal <= 12){
             k = static_cast<uint64_t>(kVal);
         }else{
             std::cerr << "k-val must be less than greater than 0 and less than 64" << std::endl;

@@ -1,8 +1,18 @@
 \begin{thebibliography}{1}
 
+\bibitem{deorowicz2015kmc2}
+Sebastian Deorowicz, Marek Kokot, Szymon Grabowski, and Agnieszka Debudaj-Grabysz.
+\newblock Kmc 2: fast and resource-frugal k-mer counting.
+\newblock {\em Bioinformatics}, 31(10):1569--1576, 2015.
+
 \bibitem{lees2016seer}
 John~A. Lees, Minna Vehkala, Niko V{\"a}lim{\"a}ki, et~al.
 \newblock Sequence element enrichment analysis to determine the genetic basis of bacterial phenotypes.
 \newblock {\em Nature Communications}, 7:12797, 2016.
+
+\bibitem{marcais2011jellyfish}
+Guillaume Marcais and Carl Kingsford.
+\newblock A fast, lock-free approach for efficient parallel counting of occurrences of k-mers.
+\newblock {\em Bioinformatics}, 27(6):764--770, 2011.
 
 \end{thebibliography}

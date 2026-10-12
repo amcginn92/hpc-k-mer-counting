@@ -23,9 +23,15 @@ biological sequence. These sequences consist of the four bases of DNA (A,C,G, an
 and use to compare DNA samples. They are called k-mers because in chemistry a ``mer'' is a repeating unit  
 within a larger molecule (in genomics that molecule is mainly DNA). Larger values of k can provide more  
 sequence specific information, while shorter values provide greater sensitivity\cite{lees2016seer}. For example, 
-if two genes have the same k-mer (e.g. k=15) it would be much more likely they have similar structure in that area. A singl base 
+if two genes have the same k-mer (e.g. k=15) it would be much more likely they have similar structure in that area. A single base 
 mismatch in one of those larger k-mers would mean many overlapping k-mers would no longer match. Whereas, a shorter k-mer would consider 
 a single character mismatch to have less of an affect on the overall comparison.
+
+\vspace{\baselineskip}
+
+Another application of k-mer counting is the estimation of genome size. Marcais and Kingsford explain that
+k-mer frequency statistics can be used to estimate sequencing coverage and subsequently
+``derive an estimate of the genome size from $c$ and the total length of the reads'' \cite{marcais2011jellyfish}.
 
 \vspace{\baselineskip}
 
@@ -63,6 +69,8 @@ e.g. in a 5 k-mer example:
 4^5 = 1024 \text{ possible subsequences}
 \]
 
+\vspace{\baselineskip}
+
 We could then also have an array that holds the count of each k-mer in the dataset. Therefore, we know that we  
 need 1024 representations of the four possible bases. We can then also predict the size of the array used to count those  
 occurrences. To determine the size necessary, we then need to consider the maximum possible number of occurences  
@@ -70,28 +78,62 @@ a k-mer can have. This will be dictated by frequency, which we cannot outright p
 can be certain of the total number of possible occurrences based on the dataset size. That is because the maximum  
 value will always be equal to how many possible substrings there are, determined by:
 
+\vspace{\baselineskip}
+
 \[
 n - k + 1
 \]
 
+\vspace{\baselineskip}
+
 e.g. in a DNA Sequence of length 66,000 with k-value equal to 5:
+
+\vspace{\baselineskip}
 
 \[
 66000 - 5 + 1 = 65996
 \]
 
+\vspace{\baselineskip}
+
 Which means that we need array elements that go up to at least 65996. In this instance, we would know we now need  
 elements larger than an unsigned short, which would reach capacity at 65,535
 
+\vspace{\baselineskip}
+
+\subsection{Similar Work}
+
+\vspace{\baselineskip}
+
+One similar project proposed by Marcais and Kingsford \cite{marcais2011jellyfish} introduced Jellyfish, a parallel k-mer counting 
+algorithm designed to improve performance and memory efficiency when processing large genomic datasets. Jellyfish utilizes a
+multithreaded, lock-free hash table that allows concurrent updates through atomic operations rather than conventional
+locking mechanisms. The implementation also leverages compact data representations to reduce memory requirements. Their work 
+demonstrates the importance of synchronization overhead and memory-efficient data structures in parallel k-mer
+counting, both of which will be considered when evaluating the parallelization strategies proposed in this project. 
+
+\vspace{\baselineskip}
+
+Deorowicz et al. \cite{deorowicz2015kmc2} introduced KMC 2, a parallel k-mer counting algorithm that focuses on reducing memory 
+consumption and disk I/O overhead when processing large genomic datasets. Unlike approaches that rely primarily on concurrent hash-table 
+updates, KMC 2 partitions sequence data into smaller groups using signatures derived from minimizers. These partitions can then be processed 
+using parallel sorting and counting operations, reducing the amount of data that must be held in memory simultaneously. The authors also 
+introduced $(k,x)$-mers to reduce redundant processing of overlapping k-mers. This approach highlights the importance of memory management, 
+workload distribution, and I/O overhead, which are relevant considerations for the parallelization methodology proposed in this project.
+
 %========================================================== Project Objectives
 \section{Project Objectives}
+
+\vspace{\baselineskip}
 
 The objective of this project is to analyze the effects of parallelization on k-mer counting for genomic sequences.  
 An initial implementation will be written in C++ performing the k-mer count for a baseline. The algorithm will then  
 be written using OpenMP for parallelization on multiple CPU cores. Another implementation will utilize CUDA  
 for GPU parallelization. MPI may also be evaluated if suitable distributed computing resources are available.  
 There is a possibility of using an old desktop and Amazon EC2 instances to provide this additional resource. 
-  
+
+\vspace{\baselineskip}
+
 Experiments will vary the dataset size and k-mer size. The performance will then be evaluated in standard methods. Most  
 notably in speedup compared to the serial implementation, memory consumption, and the behavior of the implementation when scaling  
 the dataset and k-mer size. 
