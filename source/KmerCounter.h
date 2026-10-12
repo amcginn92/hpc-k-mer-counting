@@ -15,7 +15,10 @@ public:
 
     //==================================Public Functions
     void countSequence(const std::string& sequence);
+    void countSequences();
     uint64_t getCount(uint64_t encoded) const;
+    void loadFasta(const std::string& filename);
+    
     //==================================Public Variables
     
 
@@ -28,6 +31,8 @@ private:
     //==================================Private Variables
     uint64_t k_;
     std::vector<uint64_t> counts_;
+    std::vector<std::string> sequences_;
+
 
 
 };

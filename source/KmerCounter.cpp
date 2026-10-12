@@ -1,4 +1,5 @@
 #include "KmerCounter.h"
+#include <fstream>
 
 
 KmerCounter::KmerCounter(uint64_t k) 
@@ -7,11 +8,56 @@ KmerCounter::KmerCounter(uint64_t k)
 {
 }
 
+void KmerCounter::loadFasta(const std::string& filename)
+{
+    std::ifstream file(filename);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open FASTA file: " + filename);
+    }
+
+    std::vector<std::string> sequences;
+    std::string line;
+    std::string sequence;
+    bool inRecord = false;
+
+    while (std::getline(file, line)) {
+
+        if (!line.empty() && line[0] == '>') {
+            if (inRecord && !sequence.empty()) {
+                sequences.push_back(std::move(sequence));
+                sequence.clear();
+            }
+
+            inRecord = true;
+        }
+        else if (inRecord) {
+            sequence += line;
+        }
+    }
+
+    if (!sequence.empty()) {
+        sequences.push_back(std::move(sequence));
+    }
+
+    if (file.bad()) {
+        throw std::runtime_error("Error reading FASTA file");
+    }
+
+    sequences_ = std::move(sequences);
+}
 
 
 uint64_t KmerCounter::getCount(uint64_t encoded) const
 {
     return counts_.at(encoded);
+}
+
+void KmerCounter::countSequences()
+{
+    for (const auto& sequence : sequences_) {
+        countSequence(sequence);
+    }
 }
 
 //  Counts the given sequence, if valid
