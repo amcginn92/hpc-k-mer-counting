@@ -15,4 +15,15 @@ Guillaume Marcais and Carl Kingsford.
 \newblock A fast, lock-free approach for efficient parallel counting of occurrences of k-mers.
 \newblock {\em Bioinformatics}, 27(6):764--770, 2011.
 
+\bibitem{moeckel2024kmer}
+Camille Moeckel, Manvita Mareboina, Maxwell~A. Konnaris, et~al.
+\newblock A survey of k-mer methods and applications in bioinformatics.
+\newblock {\em Computational and Structural Biotechnology Journal}, 23:2289--2303, 2024.
+
+\bibitem{ncbi_ecoli}
+{National Center for Biotechnology Information}.
+\newblock {Escherichia coli} str. k-12 substr. mg1655, complete genome.
+\newblock \url{https://www.ncbi.nlm.nih.gov/nuccore/NC_000913.3}, 2013.
+\newblock NCBI RefSeq accession NC\_000913.3; Assembly GCF\_000005845.2; Accessed: October 17, 2026.
+
 \end{thebibliography}

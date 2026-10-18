@@ -18,20 +18,31 @@
 %========================================================== Introduction
 \section{Introduction}
 
-In genomic sequence analysis, k-mer counting consists of creating substrings for varying k-lengths from a  
-biological sequence. These sequences consist of the four bases of DNA (A,C,G, and T), which we can count  
-and use to compare DNA samples. They are called k-mers because in chemistry a ``mer'' is a repeating unit  
-within a larger molecule (in genomics that molecule is mainly DNA). Larger values of k can provide more  
-sequence specific information, while shorter values provide greater sensitivity\cite{lees2016seer}. For example, 
-if two genes have the same k-mer (e.g. k=15) it would be much more likely they have similar structure in that area. A single base 
-mismatch in one of those larger k-mers would mean many overlapping k-mers would no longer match. Whereas, a shorter k-mer would consider 
-a single character mismatch to have less of an affect on the overall comparison.
+\vspace{\baselineskip}
+
+In genomic sequence analysis, genetic information is represented by long sequences containing millions or even billions of nucleotide 
+bases, primarily adenine (A), cytosine (C), guanine (G), and thymine (T). To compare genomic samples, scientists need methods that can 
+identify meaningful similarities even when two sequences are not exact matches. This is important because even closely related organisms 
+or samples can contain mutations, insertions, deletions, and other sequence variations. Although genomic sequences may differ, 
+biologically meaningful similarities can often be detected through shared local sequence patterns such as k-mers \cite{moeckel2024kmer}.
 
 \vspace{\baselineskip}
 
-Another application of k-mer counting is the estimation of genome size. Marcais and Kingsford explain that
-k-mer frequency statistics can be used to estimate sequencing coverage and subsequently
-``derive an estimate of the genome size from $c$ and the total length of the reads'' \cite{marcais2011jellyfish}.
+One method for identifying these local patterns is k-mer analysis. A sliding window of length \(k\) is moved across a genomic sequence, 
+producing every contiguous substring of length \(k\). These substrings are called k-mers, and the number of times each unique k-mer occurs 
+can then be counted. The resulting k-mer frequencies provide a compact way to characterize and compare genomic sequences without requiring 
+the sequences to match in their entirety. Larger values of \(k\) provide more sequence-specific information, while smaller values provide 
+greater sensitivity to local similarities \cite{lees2016seer}. For example, if two genomic regions contain the same 15-mer, this represents 
+a more specific local match than sharing a much shorter k-mer. However, a single base difference can disrupt several overlapping large k-mers, 
+while shorter k-mers are less sensitive to an individual mismatch.
+
+\vspace{\baselineskip}
+
+When analyzing a genetic sample, we do not obtain the entire genome in one clean pass. Instead, sequencing produces many shorter reads from the sample,
+which often overlap and contain repeated coverage of the same genomic regions. As a result, the same k-mer may appear several times across the reads.
+Because the complete genome may not already be known, we cannot always determine its total size directly from the sequencing output. However, as Marcais
+and Kingsford explain, k-mer frequency statistics can be used to estimate sequencing coverage and subsequently ``derive an estimate of the genome size
+from (c) and the total length of the reads'' \cite{marcais2011jellyfish}.
 
 \vspace{\baselineskip}
 
@@ -44,6 +55,8 @@ types of tasks.
 
 %========================================================== Background
 \section{Background}
+
+\vspace{\baselineskip}
 
 To process a set of k-mer (determined by the k value; e.g. k = 4) we first move a sliding window of size k across the entire sequence and extract every k-mer substring.  
 The first benefit is that we can now compare genomic sequences without simply comparing their complete ordering. Another benefit is that when we 
@@ -121,14 +134,89 @@ using parallel sorting and counting operations, reducing the amount of data that
 introduced $(k,x)$-mers to reduce redundant processing of overlapping k-mers. This approach highlights the importance of memory management, 
 workload distribution, and I/O overhead, which are relevant considerations for the parallelization methodology proposed in this project.
 
-%========================================================== Project Objectives
-\section{Project Objectives}
+
+%========================================================== Sequential Implementation
+
+\section{Sequential Implementation}
 
 \vspace{\baselineskip}
 
-The objective of this project is to analyze the effects of parallelization on k-mer counting for genomic sequences.  
-An initial implementation will be written in C++ performing the k-mer count for a baseline. The algorithm will then  
-be written using OpenMP for parallelization on multiple CPU cores. Another implementation will utilize CUDA  
+\subsection{Dataset and FASTA Input Processing}
+
+\vspace{\baselineskip}
+
+The initial sequential implementation was developed in C++ and tested using the Escherichia coli 
+K-12 MG1655 reference genome, obtained from the National Center for Biotechnology Information (NCBI).
+The reference genome contains 4,641,652 nucleotide bases and is provided in FASTA format \cite{ncbi_ecoli}.
+
+\vspace{\baselineskip}
+
+FASTA files contain base pairs separated by header lines beginning with the `\texttt{>}' character.
+The implementation reads the file line by line, concatenating base pairs belonging to the same sequence
+and storing each completed sequence in a string.
+
+\vspace{\baselineskip}
+
+The runtime is evaluated both before the FASTA loading operation is performed and before the sequential counting benchmark begins, allowing the
+execution time of the counting algorithm to be measured independently of file input operations. 
+
+\vspace{\baselineskip}
+
+\subsection{Base Encoding}
+
+\vspace{\baselineskip}
+
+Each base is represented using a two-bit integer encoding, where A, C, G, and T correspond to the values
+0, 1, 2, and 3, respectively. Since each base requires two bits, a k-mer of length $k$ can be represented
+using $2k$ bits. The implementation then stores the encoded k-mer in an unsigned 64-bit integer using bit manipulation, 
+which allows a maximum k-mer length of $k=32$.
+
+\vspace{\baselineskip}
+
+A count \texttt{vector} is allocated with $4^k$ elements, corresponding to every possible k-mer of length $k$.
+Each element is a \texttt{uint64\_t}, resulting in a total allocation of $8 \times 4^k$ bytes. As each
+k-mer is processed, its two-bit representation is shifted into the encoded integer. The resulting integer
+value is then used directly as the index into the count \texttt{vector}, allowing the corresponding k-mer count
+to be incremented without requiring a hash-table lookup.
+
+\vspace{\baselineskip}
+
+Many genetic sequences will have bases that are not read correctly, which is represented in the file as an \texttt{N}. 
+Entries that contain this character representing an invalid reading will not be used in the final count.
+
+\subsection{Sliding Window and Frequency Counting}
+
+The sequential algorithm processes each sequence using a sliding window of length $k$. Rather than
+constructing a new substring at every position, the implementation maintains an integer containing the
+encoded bases of the current window.
+
+For each new base, the encoded integer is shifted left by two bits, and the encoded value of the new
+nucleotide is inserted using a bitwise OR operation. A bitmask is then applied to remove any bits extending
+beyond the current k-mer, ensuring that only the most recent $k$ bases are retained.
+
+Once $k$ valid nucleotides have been processed, the resulting integer is used as an index into a frequency
+counting array. Each array entry stores the number of occurrences of its corresponding k-mer. This allows
+the frequency counts to be updated directly without requiring a hash table or additional lookup operations.
+
+\newpage
+
+\subsection{Time \& Memory Complexity}
+
+\vspace{\baselineskip}
+
+The main components of the applications are reading the sequences from the file, initializing the counter array, and processing and incrementing each k-mer. 
+Initializing the count of the array to default values takes $O(4^k)$ time, while processing and incrementing each k-mer only takes $O(n)$ time. Since reading 
+from a file also takes linear time with respect to the number of bases, the overall time complexity is $O(4^k + n)$.
+
+\vspace{\baselineskip}
+
+%========================================================== Parallel Methodology
+\section{Parallelization Methodology}
+
+\vspace{\baselineskip}
+
+The objective of this project is to analyze the effects of parallelization on k-mer counting for genomic sequences. 
+The algorithm will then be written using OpenMP for parallelization on multiple CPU cores. Another implementation will utilize CUDA  
 for GPU parallelization. MPI may also be evaluated if suitable distributed computing resources are available.  
 There is a possibility of using an old desktop and Amazon EC2 instances to provide this additional resource. 
 
@@ -139,12 +227,16 @@ notably in speedup compared to the serial implementation, memory consumption, an
 the dataset and k-mer size. 
 
 
-\newpage
+
+
+
+
+%========================================================== Document End
 
 \bibliographystyle{plain}
 \bibliography{references}
 
 \end{document}
-%========================================================== EOF
+%====================================================================================================================== EOF  
 
 

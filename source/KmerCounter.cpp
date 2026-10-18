@@ -66,6 +66,7 @@ void KmerCounter::countSequence(const std::string& sequence)
     uint64_t encoded = 0;
     uint64_t validBases = 0;
 
+    // We use bitwise & to discard additional values 
     uint64_t mask = (1ULL << (2 * k_)) - 1;
 
     for (char base : sequence) {

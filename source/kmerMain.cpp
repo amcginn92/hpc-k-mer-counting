@@ -5,6 +5,8 @@
 
 #include "KmerCounter.h"
 
+const int maxK = 12;
+
 bool verifyInput(int argc, char** argv, uint64_t& k);
 
 using namespace std;
@@ -15,6 +17,9 @@ int main(int argc, char** argv){
     if(!verifyInput(argc, argv, k)){
         return 1;
     }
+
+    auto startFull = std::chrono::steady_clock::now();
+
     KmerCounter counter(k);
     
     counter.loadFasta(argv[2]);
@@ -22,18 +27,26 @@ int main(int argc, char** argv){
     auto start = std::chrono::steady_clock::now();
 
     counter.countSequences();
+
     auto end = std::chrono::steady_clock::now();
 
-    std::chrono::duration<double> elapsed = end - start;
+    std::chrono::duration<double> elapsedCount = end - start;
 
-    std::cout << "Processing time: "
-            << elapsed.count()
+    std::chrono::duration<double> elapsedFull = end - startFull;
+
+
+    std::cout << "Total processing time: "
+            << elapsedFull.count()
             << " seconds\n";
 
-    std::cout << "ACG: " << counter.getCount(6) << std::endl;
-    std::cout << "CGT: " << counter.getCount(27) << std::endl;
-    std::cout << "GTA: " << counter.getCount(44) << std::endl;
-    std::cout << "TAC: " << counter.getCount(49) << std::endl;
+    std::cout << "Count time: "
+            << elapsedCount.count()
+            << " seconds\n";
+
+    // std::cout << "ACG: " << counter.getCount(6) << std::endl;
+    // std::cout << "CGT: " << counter.getCount(27) << std::endl;
+    // std::cout << "GTA: " << counter.getCount(44) << std::endl;
+    // std::cout << "TAC: " << counter.getCount(49) << std::endl;
 
     return 0;
 }
@@ -45,10 +58,10 @@ bool verifyInput(int argc, char** argv, uint64_t& k){
         return false;
     }else{
         ull kVal = std::stoull(argv[1]);
-        if(kVal > 0 && kVal <= 12){
+        if(kVal > 0 && kVal <= maxK){
             k = static_cast<uint64_t>(kVal);
         }else{
-            std::cerr << "k-val must be less than greater than 0 and less than 64" << std::endl;
+            std::cerr << "k-val must be less than greater than 0 and less than" << maxK << std::endl;
             return false;
         }
     }
