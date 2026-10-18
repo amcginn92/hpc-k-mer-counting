@@ -238,8 +238,8 @@ all possible sequences increases dramatically.
 
 In Figure \ref{fig:sequential_performance}, we can see that the time it takes to process the same amount of data for different k-values also increases greatly 
 after $k=9$. This is likely due to the size of the count array needed for all possible values. Initializing that array to default values alone is on the 
-order of $4^{12}= 16{,}777{,}216$. With that many possible k-mers it is unlikely that we will have many cache hits, which is likely why we see such a drop 
-off in the performance, despite the sequence size remaining constant.
+order of $4^{12}= 16{,}777{,}216$. With that many possible k-mers, the larger frequency array may reduce cache efficiency and increase memory access latency, 
+which is likely why we see such a drop off in the performance, despite the sequence size remaining constant.
 
 \vspace{\baselineskip}
 
@@ -249,6 +249,17 @@ off in the performance, despite the sequence size remaining constant.
 
 \vspace{\baselineskip}
 
+\subsection{Correctness Verification}
+
+The correctness of the sequential implementation was verified against an independent Python
+implementation using the same E. Coli FASTA dataset. The Python implementation generates k-mers
+using string operations and counts their frequencies using the Counter data structure, rather
+than using the two-bit encoding and direct-indexed array of the C++ implementation.
+
+Verification was performed for k-mer lengths of 3, 6, 9, and 12. For each configuration,
+the frequency of every unique k-mer was compared between the two implementations. All four
+configurations produced identical frequency distributions with zero mismatches, confirming
+the correctness of the sequential implementation for the tested dataset and k values.
 
 %========================================================== Parallel Methodology
 \section{Parallelization Methodology}
@@ -280,14 +291,14 @@ approach and determine under which conditions parallelization provides the great
 \vspace{\baselineskip}
 
 The initial implementation will use OpenMP to distribute the k-mer counting workload across multiple CPU threads. The input sequences will be partitioned 
-into smaller regions and then distributed across the threads to allow processing of different protions of the data. However, k-mers are generated using 
+into smaller regions and then distributed across the threads to allow processing of different portions of the data. However, k-mers are generated using 
 overlapping windows, so we must account for the necessary overlap in between partitions. 
 
 \vspace{\baselineskip}
 
 There are three approaches that can be taken when working with OpenMP and our current design. First, we could use the same count array and 
 share it between the threads, but this requires some sort of protection to ensure thread safety. Atomics could be a good solution, and requires 
-minimal changes top of the sequential logic. Although, if many of the threads are attempting to increment the same counter, contention 
+minimal changes to the sequential logic. Although, if many of the threads are attempting to increment the same counter, contention 
 could negatively affect the performance impact. 
 
 \vspace{\baselineskip}
@@ -332,7 +343,6 @@ between the host and device memory. The initialization of the GPU count array an
 be included when measuring total processing time. The effects of different k-mer lengths, dataset sizes, and GPU thread configurations will be
 evaluated to determine how these factors influence performance and memory utilization.
 
-\newpage
 
 \vspace{\baselineskip}
 
@@ -362,6 +372,10 @@ the variation between trials.
 
 \vspace{\baselineskip}
 
+\section{Execution}
+
+\vspace{\baselineskip}
+
 \begin{center}
 \begin{tcolorbox}[
     colback=gray!8,
@@ -379,11 +393,18 @@ make
 
 \vspace{6pt}
 
-./scripts/benchmark.sh <size>
+./scripts/benchmark.sh
 
 \vspace{6pt}
 
-./out <k-val> <FASTA file> 
+./out <k-val> <FASTA\_file> [output\_counts.csv]
+
+\vspace{12pt}
+
+\# Correctness Check
+\vspace{6pt}
+
+./scripts/verify\_counts.sh
 
 \end{tcolorbox}
 \end{center}
