@@ -113,5 +113,14 @@ uint8_t KmerCounter::encodeBase(char base){
     }
 }
 
+void KmerCounter::writeCounts(std::ostream& output) const
+{
+    output << "encoded,count\n";
 
+    for (uint64_t i = 0; i < counts_.size(); i++) {
+        if (counts_[i] != 0) {
+            output << i << "," << counts_[i] << "\n";
+        }
+    }
+}
 

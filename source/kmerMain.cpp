@@ -43,18 +43,31 @@ int main(int argc, char** argv){
             << elapsedCount.count()
             << " seconds\n";
 
-    // std::cout << "ACG: " << counter.getCount(6) << std::endl;
-    // std::cout << "CGT: " << counter.getCount(27) << std::endl;
-    // std::cout << "GTA: " << counter.getCount(44) << std::endl;
-    // std::cout << "TAC: " << counter.getCount(49) << std::endl;
+
+    if(argc == 4){
+        std::ofstream output(argv[3]);
+
+        if(!output.is_open()){
+            std::cerr << "Cannot open output file: " << argv[3] << "\n";
+            return 1;
+        }
+
+        counter.writeCounts(output);
+
+        if(!output){
+            std::cerr << "Error writing counts file\n";
+            return 1;
+        }
+    }
 
     return 0;
 }
 
 bool verifyInput(int argc, char** argv, uint64_t& k){
 
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <k> <fasta-file>\n";
+    if(argc != 3 && argc != 4){
+        std::cerr << "Usage: " << argv[0]
+                << " <k> <fasta-file> [counts-output.csv]\n";
         return false;
     }else{
         ull kVal = std::stoull(argv[1]);

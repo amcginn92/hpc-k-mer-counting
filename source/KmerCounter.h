@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <ostream>
 
 typedef uint64_t ull;
 
@@ -18,7 +19,8 @@ public:
     void countSequences();
     uint64_t getCount(uint64_t encoded) const;
     void loadFasta(const std::string& filename);
-    
+    void writeCounts(std::ostream& output) const;
+
     //==================================Public Variables
     
 
