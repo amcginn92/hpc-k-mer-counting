@@ -6,6 +6,17 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\usepackage{placeins}
+\usepackage[most]{tcolorbox}
+\usepackage[all]{hypcap}
+
+
+\pgfplotsset{compat=1.18}
+
+
 \title{Analysis of Parallelization Techniques on k-mer Counting for Genomic Sequences}
 
 \author{Alex McGinn}
@@ -50,7 +61,7 @@ Although, as k increases, the number of possible k-mers grows exponentially, lea
 store and process k-mer counts. Alternatively, if k is shorter, we may have many matches, which would require the counter variable to 
 have a larger range. 
 For large genomic datasets, these computations become expensive, but there are various methods to accelerate this 
-process using parallelization. The aim of this project was therefore to analyze the effectiveness of CPU/GPU parallelism for these  
+process using parallelization. The aim of this project is therefore to analyze the effectiveness of CPU/GPU parallelism for these  
 types of tasks.
 
 %========================================================== Background
@@ -151,8 +162,8 @@ The reference genome contains 4,641,652 nucleotide bases and is provided in FAST
 
 \vspace{\baselineskip}
 
-FASTA files contain base pairs separated by header lines beginning with the `\texttt{>}' character.
-The implementation reads the file line by line, concatenating base pairs belonging to the same sequence
+FASTA files contain nucleotide bases separated by header lines beginning with the `\texttt{>}' character.
+The implementation reads the file line by line, concatenating nucleotide bases belonging to the same sequence
 and storing each completed sequence in a string.
 
 \vspace{\baselineskip}
@@ -169,7 +180,7 @@ execution time of the counting algorithm to be measured independently of file in
 Each base is represented using a two-bit integer encoding, where A, C, G, and T correspond to the values
 0, 1, 2, and 3, respectively. Since each base requires two bits, a k-mer of length $k$ can be represented
 using $2k$ bits. The implementation then stores the encoded k-mer in an unsigned 64-bit integer using bit manipulation, 
-which allows a maximum k-mer length of $k=32$.
+which allows a maximum k-mer length of $k=32$, although for testing purposes we have limited it to 12.
 
 \vspace{\baselineskip}
 
@@ -198,6 +209,8 @@ Once $k$ valid nucleotides have been processed, the resulting integer is used as
 counting array. Each array entry stores the number of occurrences of its corresponding k-mer. This allows
 the frequency counts to be updated directly without requiring a hash table or additional lookup operations.
 
+The accuracy of the output is being verified by comparison to a python script \texttt{kmerCountVerify.py}. 
+
 \newpage
 
 \subsection{Time \& Memory Complexity}
@@ -206,9 +219,36 @@ the frequency counts to be updated directly without requiring a hash table or ad
 
 The main components of the applications are reading the sequences from the file, initializing the counter array, and processing and incrementing each k-mer. 
 Initializing the count of the array to default values takes $O(4^k)$ time, while processing and incrementing each k-mer only takes $O(n)$ time. Since reading 
-from a file also takes linear time with respect to the number of bases, the overall time complexity is $O(4^k + n)$.
+from a file also takes linear time with respect to the number of bases, the overall time complexity is $O(4^k + n)$. This sequential implementation was 
+evaluated for 3, 6, 9, and 12.
 
 \vspace{\baselineskip}
+
+The memory constraints for this implementation require us to hold the sequence itself in main memory, as well as a \texttt{vector} of \texttt{uint\_64t} 
+that has enough memory for all $4^k$ possible sequences. Table \ref{tab:sequential_results} shows that at $k=12$ the amount of RAM that is necessary to store 
+all possible sequences increases dramatically.
+
+\vspace{\baselineskip}
+
+\FloatBarrier
+\input{/home/amcgin/kmerCounting/source/etc/benchmark_table.tex}
+\FloatBarrier
+
+\vspace{\baselineskip}
+
+In Figure \ref{fig:sequential_performance}, we can see that the time it takes to process the same amount of data for different k-values also increases greatly 
+after $k=9$. This is likely due to the size of the count array needed for all possible values. Initializing that array to default values alone is on the 
+order of $4^{12}= 16{,}777{,}216$. With that many possible k-mers it is unlikely that we will have many cache hits, which is likely why we see such a drop 
+off in the performance, despite the sequence size remaining constant.
+
+\vspace{\baselineskip}
+
+\FloatBarrier
+\input{/home/amcgin/kmerCounting/source/etc/benchmark_plot.tex}
+\FloatBarrier
+
+\vspace{\baselineskip}
+
 
 %========================================================== Parallel Methodology
 \section{Parallelization Methodology}
@@ -217,19 +257,138 @@ from a file also takes linear time with respect to the number of bases, the over
 
 The objective of this project is to analyze the effects of parallelization on k-mer counting for genomic sequences. 
 The algorithm will then be written using OpenMP for parallelization on multiple CPU cores. Another implementation will utilize CUDA  
-for GPU parallelization. MPI may also be evaluated if suitable distributed computing resources are available.  
-There is a possibility of using an old desktop and Amazon EC2 instances to provide this additional resource. 
+for GPU parallelization. 
 
 \vspace{\baselineskip}
 
-Experiments will vary the dataset size and k-mer size. The performance will then be evaluated in standard methods. Most  
-notably in speedup compared to the serial implementation, memory consumption, and the behavior of the implementation when scaling  
-the dataset and k-mer size. 
+
+Experiments will vary the dataset size and k-mer length to evaluate the performance of both OpenMP and CUDA implementations.
+Both approaches will be compared against the sequential baseline in terms of execution time, speedup, and memory consumption.
+For OpenMP, the evaluation will examine the effects of thread count, scheduling, synchronization overhead, and the cost of
+combining thread-local frequency arrays. For CUDA, both GPU kernel execution time and total execution time will be measured,
+including host-to-device and device-to-host memory transfers. The results will be used to compare the scalability of each
+approach and determine under which conditions parallelization provides the greatest performance improvement.
 
 
+\vspace{\baselineskip}
 
 
+%========================================================== OpenMP
 
+\subsection{OpenMP CPU Parallelization}
+
+\vspace{\baselineskip}
+
+The initial implementation will use OpenMP to distribute the k-mer counting workload across multiple CPU threads. The input sequences will be partitioned 
+into smaller regions and then distributed across the threads to allow processing of different protions of the data. However, k-mers are generated using 
+overlapping windows, so we must account for the necessary overlap in between partitions. 
+
+\vspace{\baselineskip}
+
+There are three approaches that can be taken when working with OpenMP and our current design. First, we could use the same count array and 
+share it between the threads, but this requires some sort of protection to ensure thread safety. Atomics could be a good solution, and requires 
+minimal changes top of the sequential logic. Although, if many of the threads are attempting to increment the same counter, contention 
+could negatively affect the performance impact. 
+
+\vspace{\baselineskip}
+
+Another method would be to assign each thread with its own array, and then consolidate the data after each thread finishes counting. This would 
+likely lead to an increased problem with the amount of memory required for larger k, which was encountered in the sequential approach. This 
+is because we would have to initialize a $4^k$ array for every thread. For 8 threads and $k=12$ this would already take up 1GB of space. 
+
+\vspace{\baselineskip}
+
+The last method would be partitioned ownership, in which each thread is designated owner of some part of the shared array. The data is distributed, but 
+when a thread encounters a k-mer that does not belong to its partition, it instead determines the owner and sends the k-mer to their buffer. 
+
+\vspace{\baselineskip}
+
+The first two methods are simpler to implement, and provide useful comparisons between synchronization and memory overhead. The partitioned ownership 
+is more complex, but would provide an additional comparison by replacing conflicting shared updates with communication overhead. An initial implementation 
+using local counter arrays is planned, and then a more detailed attempt into the partitioned ownership method.
+
+
+\vspace{\baselineskip}
+
+%========================================================== CUDA 
+
+\subsection{CUDA GPU Parallelization}
+
+\vspace{\baselineskip}
+
+A second parallel implementation will use CUDA to perform k-mer counting on the GPU. Sequence data will be transferred from RAM into the device memory 
+of the GPU. The initial implementation will assign ranges of k-mer starting positions to GPU threads. Each thread will encode its assigned k-mers using the 
+same two bit representation as the sequential implementation. 
+
+\vspace{\baselineskip}
+
+The encoded k-mers resulting from this task will be used to index a frequency array stored in GPU global memory. This implementation will also have to 
+deal with race conditions or memory corruption. Atomic increments should also work for this implementation, similar to how they are planned for OpenMP. 
+
+\vspace{\baselineskip}
+
+The CUDA implementation will be evaluated by measuring the execution time of the counting kernel separately from the time required to transfer sequence data 
+between the host and device memory. The initialization of the GPU count array and the transfer of the resulting frequencies back to host memory will also 
+be included when measuring total processing time. The effects of different k-mer lengths, dataset sizes, and GPU thread configurations will be
+evaluated to determine how these factors influence performance and memory utilization.
+
+\newpage
+
+\vspace{\baselineskip}
+
+\subsection{CPU \& Compiler Info}
+
+The sequential implementation was compiled using the GNU C++ compiler (g++) with the C++17
+language standard and the -O2 optimization flag. This optimization level enables compiler
+optimizations intended to improve execution performance while retaining the same algorithmic
+behavior. The implementation was executed under AlmaLinux 9.6 within WSL2 on a Windows host.
+Each benchmark configuration was executed ten times to measure average execution time and
+the variation between trials.
+
+\begin{itemize}
+    \item \textbf{CPU:} AMD Ryzen 7 7700 8-Core Processor
+    \item \textbf{GCC:} g++ (GCC) 11.5.0 20240719 (Red Hat 11.5.0-14)
+    \item \textbf{Architecture:} x86\_64
+    \item \textbf{Physical Cores:} 8
+    \item \textbf{Hardware Threads:} 16 (2 per core)
+    \item \textbf{L1 Data Cache:} 256 KiB total, 32 KiB per core
+    \item \textbf{L1 Instruction Cache:} 256 KiB total, 32 KiB per core
+    \item \textbf{L2 Cache:} 8 MiB total, 1 MiB per core
+    \item \textbf{L3 Cache:} 32 MiB
+    \item \textbf{Execution Environment:} WSL2 / Microsoft Hyper-V
+\end{itemize}
+
+\FloatBarrier
+
+\vspace{\baselineskip}
+
+\begin{center}
+\begin{tcolorbox}[
+    colback=gray!8,
+    colframe=gray!25,
+    arc=3mm,
+    boxrule=0.4pt,
+    width=0.85\textwidth,
+    left=10pt,
+    right=10pt,
+    top=8pt,
+    bottom=8pt
+]
+\ttfamily
+make
+
+\vspace{6pt}
+
+./scripts/benchmark.sh <size>
+
+\vspace{6pt}
+
+./out <k-val> <FASTA file> 
+
+\end{tcolorbox}
+\end{center}
+
+\newpage
 
 %========================================================== Document End
 
