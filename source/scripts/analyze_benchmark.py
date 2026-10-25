@@ -2,8 +2,8 @@ import csv
 import statistics
 from collections import defaultdict
 
-INPUT_FILE = "benchmark_results.csv"
-OUTPUT_FILE = "/home/amcgin/kmerCounting/source/etc/benchmark_table.tex"
+INPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/results/benchmark_results.csv"
+OUTPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/etc/benchmark_table.tex"
 
 results = defaultdict(lambda: {"total": [], "count": [], "memory": []})
 

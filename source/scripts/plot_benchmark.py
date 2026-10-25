@@ -4,8 +4,8 @@ import statistics
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
-INPUT_FILE = "benchmark_results.csv"
-OUTPUT_FILE = "/home/amcgin/kmerCounting/source/etc/benchmark_plot.png"
+INPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/results/benchmark_results.csv"
+OUTPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/etc/benchmark_plot.png"
 
 results = defaultdict(lambda: {"total": [], "count": []})
 

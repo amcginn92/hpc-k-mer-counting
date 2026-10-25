@@ -4,7 +4,7 @@ set -euo pipefail
 
 PROJECT="/home/amcgin/kmerCounting/source"
 FASTA="$PROJECT/datasets/ecoli.fasta"
-EXEC="$PROJECT/out"
+EXEC="$PROJECT/sequential/out"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$SCRIPT_DIR/verification"
@@ -17,7 +17,7 @@ for k in 3 6 9 12; do
 
     "$EXEC" "$k" "$FASTA" "$OUTPUT"
 
-    python3 "$SCRIPT_DIR/kmerCountVerify.py" \
+    python3 "$PROJECT/scripts/kmerCountVerify.py" \
         "$k" "$FASTA" "$OUTPUT"
 
     echo

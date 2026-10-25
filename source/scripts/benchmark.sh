@@ -1,8 +1,8 @@
 #!/bin/bash
 
 FASTA="/home/amcgin/kmerCounting/source/datasets/ecoli.fasta"
-EXEC="/home/amcgin/kmerCounting/source/out"
-RESULTS="benchmark_results.csv"
+EXEC="/home/amcgin/kmerCounting/source/sequential/out"
+RESULTS="/home/amcgin/kmerCounting/source/sequential/results/benchmark_results.csv"
 
 echo "k,run,total_time_seconds,count_time_seconds,max_memory_kb" > "$RESULTS"
 

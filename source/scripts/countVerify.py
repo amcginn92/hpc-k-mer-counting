@@ -114,7 +114,7 @@ def verify(k, fasta, cpp_file):
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: python3 kmerCountVerify.py <k> <fasta> <cpp-csv>")
+        print("Usage: python3 countVerify.py <k> <fasta> <cpp-csv>")
         sys.exit(1)
 
     k = int(sys.argv[1])
