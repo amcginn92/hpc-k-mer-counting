@@ -50,14 +50,20 @@ void KmerCounter::countParallel(int numThreads){
         }
     }
 
-    // Each thread gets 4^k counter
-    std::vector<std::vector<uint64_t>> localCounts(
-        numThreads,
-        std::vector<uint64_t>(arraySize, 0)
-    );
+    auto allocStart = std::chrono::steady_clock::now();
+    std::vector<std::vector<uint64_t>> localCounts(numThreads);
+
+    #pragma omp parallel for num_threads(numThreads) schedule(static)
+    for (int t = 0; t < numThreads; ++t) {
+        localCounts[t].resize(arraySize, 0);
+    }
+
+    auto allocEnd = std::chrono::steady_clock::now();
 
     // Mask used for sliding window to remove entries no longer needed
     const uint64_t mask = (1ULL << (2 * k_)) - 1;
+
+    auto countStart = std::chrono::steady_clock::now();
 
     #pragma omp parallel num_threads(numThreads)
     {
@@ -104,6 +110,11 @@ void KmerCounter::countParallel(int numThreads){
         }
     }
 
+    auto countEnd = std::chrono::steady_clock::now();
+
+    auto mergeStart = std::chrono::steady_clock::now();
+
+
     // Merge counters into the final array
     #pragma omp parallel for num_threads(numThreads) schedule(static)
     for (size_t i = 0; i < arraySize; ++i) {
@@ -116,6 +127,22 @@ void KmerCounter::countParallel(int numThreads){
 
         counts_[i] = total;
     }
+
+    auto mergeEnd = std::chrono::steady_clock::now();
+
+    using Seconds = std::chrono::duration<double>;
+
+    std::cout << "Allocation time: "
+            << Seconds(allocEnd - allocStart).count()
+            << " seconds\n";
+
+    std::cout << "Parallel counting time: "
+            << Seconds(countEnd - countStart).count()
+            << " seconds\n";
+
+    std::cout << "Merge time: "
+            << Seconds(mergeEnd - mergeStart).count()
+            << " seconds\n";
 }
 
 void KmerCounter::loadFasta(const std::string& filename)
