@@ -20,7 +20,7 @@ public:
     uint64_t getCount(uint64_t encoded) const;
     void loadFasta(const std::string& filename);
     void writeCounts(std::ostream& output) const;
-
+    void countParallel(int numThreads);
     //==================================Public Variables
     
 

@@ -7,17 +7,18 @@
 
 const int maxK = 12;
 
-bool verifyInput(int argc, char** argv, uint64_t& k);
+bool verifyInput(int argc, char** argv, uint64_t& k, int& numThreads);
 
 using namespace std;
 
 int main(int argc, char** argv){
 
     ull k = 0;
-    if(!verifyInput(argc, argv, k)){
+    int numThreads = 0;
+
+    if (!verifyInput(argc, argv, k, numThreads)) {
         return 1;
     }
-
     auto startFull = std::chrono::steady_clock::now();
 
     KmerCounter counter(k);
@@ -26,7 +27,7 @@ int main(int argc, char** argv){
 
     auto start = std::chrono::steady_clock::now();
 
-    counter.countSequences();
+    counter.countParallel(numThreads);
 
     auto end = std::chrono::steady_clock::now();
 
@@ -44,8 +45,8 @@ int main(int argc, char** argv){
             << " seconds\n";
 
 
-    if(argc == 4){
-        std::ofstream output(argv[3]);
+    if(argc == 5){
+        std::ofstream output(argv[4]);
 
         if(!output.is_open()){
             std::cerr << "Cannot open output file: " << argv[3] << "\n";
@@ -63,20 +64,33 @@ int main(int argc, char** argv){
     return 0;
 }
 
-bool verifyInput(int argc, char** argv, uint64_t& k){
+bool verifyInput(int argc, char** argv, uint64_t& k, int& numThreads) {
 
-    if(argc != 3 && argc != 4){
+    if (argc != 4 && argc != 5) {
         std::cerr << "Usage: " << argv[0]
-                << " <k> <fasta-file> [counts-output.csv]\n";
+                  << " <k> <fasta-file> <thread-count> [counts-output.csv]\n";
         return false;
-    }else{
-        ull kVal = std::stoull(argv[1]);
-        if(kVal > 0 && kVal <= maxK){
-            k = static_cast<uint64_t>(kVal);
-        }else{
-            std::cerr << "k-val must be less than greater than 0 and less than" << maxK << std::endl;
+    }
+
+    try {
+        uint64_t kVal = std::stoull(argv[1]);
+        numThreads = std::stoi(argv[3]);
+
+        if (kVal == 0 || kVal > maxK) {
+            std::cerr << "k must be between 1 and " << maxK << "\n";
             return false;
         }
+
+        if (numThreads < 1) {
+            std::cerr << "Thread count must be greater than 0\n";
+            return false;
+        }
+
+        k = kVal;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Invalid argument: " << e.what() << "\n";
+        return false;
     }
 
     return true;
