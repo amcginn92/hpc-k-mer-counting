@@ -1,69 +1,97 @@
-
+#!/usr/bin/env python3
+"""Plot combined sequential / OpenMP benchmark CSV."""
 import csv
-import statistics
-import matplotlib.pyplot as plt
+import statistics as stats
 from collections import defaultdict
+from pathlib import Path
 
-INPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/results/benchmark_results.csv"
-OUTPUT_FILE = "/home/amcgin/kmerCounting/source/sequential/etc/benchmark_plot.png"
+import matplotlib.pyplot as plt
 
-results = defaultdict(lambda: {"total": [], "count": []})
+ROOT = Path(__file__).resolve().parent.parent
+CSV = ROOT / 'results' / 'benchmark_results.csv'
+FIGURES = ROOT / 'results' / 'figures'
+FIGURES.mkdir(parents=True, exist_ok=True)
 
-with open(INPUT_FILE, newline="") as file:
-    reader = csv.DictReader(file)
+# key = (implementation, k, threads)
+records = defaultdict(list)
+with CSV.open(newline='') as stream:
+    for row in csv.DictReader(stream):
+        key = (row['implementation'], int(row['k']), int(row['threads']))
+        records[key].append(row)
 
-    for row in reader:
-        k = int(row["k"])
+if not records:
+    raise SystemExit(f'No benchmark records in {CSV}')
 
-        results[k]["total"].append(float(row["total_time_seconds"]) * 1000)
-        results[k]["count"].append(float(row["count_time_seconds"]) * 1000)
+ks = sorted({k for _, k, _ in records})
+threads = sorted({t for impl, _, t in records if impl == 'openmp'})
 
-k_values = sorted(results)
+def values(impl, k, t, column, multiplier=1):
+    return [float(row[column]) * multiplier for row in records.get((impl, k, t), []) if row[column].strip()]
 
-total_means = []
-count_means = []
-total_stds = []
-count_stds = []
+def mean(impl, k, t, column, multiplier=1):
+    v = values(impl, k, t, column, multiplier)
+    return stats.mean(v) if v else float('nan')
 
-for k in k_values:
-    total = results[k]["total"]
-    count = results[k]["count"]
+def save(name):
+    plt.tight_layout()
+    path = FIGURES / name
+    plt.savefig(path, dpi=300, bbox_inches='tight')
+    print(f'Saved {path}')
 
-    total_means.append(statistics.mean(total))
-    count_means.append(statistics.mean(count))
-
-    total_stds.append(statistics.stdev(total) if len(total) > 1 else 0)
-    count_stds.append(statistics.stdev(count) if len(count) > 1 else 0)
-
-# Plot benchmark results
+# 1. Overall counting-function time (allocation + merge included)
 plt.figure(figsize=(9, 5))
-
-plt.errorbar(
-    k_values, total_means,
-    yerr=total_stds,
-    marker="o",
-    capsize=4,
-    label="Total Processing Time"
-)
-
-plt.errorbar(
-    k_values, count_means,
-    yerr=count_stds,
-    marker="s",
-    capsize=4,
-    label="K-mer Counting Time"
-)
-
-plt.title("Sequential K-mer Counting Performance")
-plt.xlabel("K-mer Length (k)")
-plt.ylabel("Execution Time (ms)")
-
-plt.xticks(k_values)
-plt.grid(True, alpha=0.3)
+plt.plot(ks, [mean('sequential', k, 1, 'count_time_seconds', 1000) for k in ks], 'o-', label='Sequential')
+for t in threads:
+    plt.plot(ks, [mean('openmp', k, t, 'count_time_seconds', 1000) for k in ks], 'o-', label=f'OpenMP {t} threads')
+plt.xlabel('k-mer length (k)')
+plt.ylabel('Counting-function time (ms)')
+plt.title('Sequential vs OpenMP: End-to-end counting-function time')
+plt.xticks(ks)
+plt.grid(alpha=0.3)
 plt.legend()
-plt.tight_layout()
+save('count_time_comparison.png')
 
-plt.savefig(OUTPUT_FILE, dpi=300, bbox_inches="tight")
+# 2. Speedup = mean sequential count time / mean OpenMP count time
+plt.figure(figsize=(9, 5))
+for k in ks:
+    baseline = mean('sequential', k, 1, 'count_time_seconds')
+    plt.plot(threads, [baseline / mean('openmp', k, t, 'count_time_seconds') for t in threads], 'o-', label=f'k = {k}')
+plt.axhline(1.0, linestyle='--', linewidth=1, label='No speedup')
+plt.xlabel('OpenMP threads')
+plt.ylabel('Speedup (sequential / OpenMP)')
+plt.title('End-to-end counting speedup')
+plt.xticks(threads)
+plt.grid(alpha=0.3)
+plt.legend()
+save('speedup.png')
+
+# 3. Peak resident memory
+plt.figure(figsize=(9, 5))
+for k in ks:
+    plt.plot(threads, [mean('openmp', k, t, 'max_memory_kb') / 1024 for t in threads], 'o-', label=f'OpenMP k = {k}')
+plt.xlabel('OpenMP threads')
+plt.ylabel('Mean peak resident memory (MiB)')
+plt.title('OpenMP peak memory usage')
+plt.xticks(threads)
+plt.grid(alpha=0.3)
+plt.legend()
+save('memory.png')
+
+# 4. Phase breakdown for each k (one plot per k)
+for k in ks:
+    columns = [('allocation_time_seconds', 'Allocation'), ('parallel_counting_time_seconds', 'Counting'), ('merge_time_seconds', 'Merge')]
+    bottoms = [0.0] * len(threads)
+    plt.figure(figsize=(9, 5))
+    for col, label in columns:
+        heights = [mean('openmp', k, t, col, 1000) for t in threads]
+        plt.bar([str(t) for t in threads], heights, bottom=bottoms, label=label)
+        bottoms = [x + y for x, y in zip(bottoms, heights)]
+    plt.xlabel('OpenMP threads')
+    plt.ylabel('Time (ms)')
+    plt.title(f'OpenMP phase breakdown: k = {k}')
+    plt.legend()
+    plt.grid(axis='y', alpha=0.3)
+    save(f'phase_breakdown_k{k}.png')
+
+# Preserve an interactive window when an interactive Matplotlib backend is active.
 plt.show()
-
-print(f"Graph saved to {OUTPUT_FILE}")
