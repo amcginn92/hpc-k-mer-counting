@@ -13,7 +13,6 @@
 \usepackage[most]{tcolorbox}
 \usepackage[all]{hypcap}
 
-
 \pgfplotsset{compat=1.18}
 
 
@@ -368,9 +367,56 @@ the variation between trials.
     \item \textbf{Execution Environment:} WSL2 / Microsoft Hyper-V
 \end{itemize}
 
+\vspace{\baselineskip}
+
 \FloatBarrier
 
+\subsection{GPU Info}
+
 \vspace{\baselineskip}
+
+\begin{table}[ht]
+    \centering
+    \caption{GPU hardware specifications for CUDA experiments}
+    \label{tab:gpu_specs}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Specification} & \textbf{Value} \\
+        \midrule
+        GPU Model & NVIDIA GeForce RTX 5070 \\
+        Streaming Multiprocessors (SMs) & 48 \\
+        Global Memory & 12,226 MiB \\
+        Maximum Threads per Block & 1,024 \\
+        CUDA Toolkit Version & 13.5 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+
+\begin{table}[ht]
+    \centering
+    \caption{Dense k-mer frequency array memory requirements
+    and feasibility on the NVIDIA GeForce RTX 5070}
+    \label{tab:gpu_kmer_memory}
+    \begin{tabular}{ccc}
+        \toprule
+        \textbf{k-mer Length ($k$)} &
+        \textbf{Array Memory} &
+        \textbf{GPU Feasibility} \\
+        \midrule
+        12 & 128 MiB & Yes \\
+        13 & 512 MiB & Yes \\
+        14 & 2 GiB & Yes \\
+        15 & 8 GiB & Potentially \\
+        16 & 32 GiB & No \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\vspace{\baselineskip}
+
+\FloatBarrier
 
 \section{Execution}
 
