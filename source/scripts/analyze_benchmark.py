@@ -96,7 +96,7 @@ datasets = sorted({row["dataset"] for row in summary})
 ks = sorted({row["k"] for row in summary})
 
 with open(OUTPUT_FILE, "w") as file:
-    file.write("\\begin{table}[ht]\n")
+    file.write("\\begin{table}[H]\n")
     file.write("    \\centering\n")
     file.write("    \\caption{Mean k-mer counting time across ten trials (ms)}\n")
     file.write("    \\begin{tabular}{lrrrrr}\n")
@@ -137,7 +137,7 @@ print(f"\nLaTeX table saved to {OUTPUT_FILE}")
 
 # Generate CUDA timing breakdown table
 with open(CUDA_OUTPUT_FILE, "w") as file:
-    file.write("\\begin{table}[ht]\n")
+    file.write("\\begin{table}[H]\n")
     file.write("    \\centering\n")
     file.write("    \\caption{Mean CUDA execution times across ten trials (ms)}\n")
     file.write("    \\begin{tabular}{lrrrrr}\n")

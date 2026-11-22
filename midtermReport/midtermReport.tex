@@ -5,7 +5,7 @@
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{hyperref}
-
+\usepackage{float}
 \usepackage{tikz}
 \usepackage{pgfplots}
 \usepackage{pgfplotstable}
@@ -131,9 +131,9 @@ elements larger than an unsigned short, which would reach capacity at 65,535
 One similar project proposed by Marcais and Kingsford \cite{marcais2011jellyfish} introduced Jellyfish, a parallel k-mer counting 
 algorithm designed to improve performance and memory efficiency when processing large genomic datasets. Jellyfish utilizes a
 multithreaded, lock-free hash table that allows concurrent updates through atomic operations rather than conventional
-locking mechanisms. The implementation also leverages compact data representations to reduce memory requirements. Their work 
-demonstrates the importance of synchronization overhead and memory-efficient data structures in parallel k-mer
-counting, both of which will be considered when evaluating the parallelization strategies proposed in this project. 
+locking mechanisms. The implementation also leverages compact data representations to reduce memory requirements. Their work demonstrates 
+the importance of synchronization overhead and memory-efficient data structures in parallel k-mer counting, both of which were 
+considered when designing and evaluating the parallel implementations in this project.
 
 \vspace{\baselineskip}
 
@@ -142,8 +142,29 @@ consumption and disk I/O overhead when processing large genomic datasets. Unlike
 updates, KMC 2 partitions sequence data into smaller groups using signatures derived from minimizers. These partitions can then be processed 
 using parallel sorting and counting operations, reducing the amount of data that must be held in memory simultaneously. The authors also 
 introduced $(k,x)$-mers to reduce redundant processing of overlapping k-mers. This approach highlights the importance of memory management, 
-workload distribution, and I/O overhead, which are relevant considerations for the parallelization methodology proposed in this project.
+workload distribution, and I/O overhead, which are relevant considerations for the parallelization methodology implemented in this project.
 
+\vspace{\baselineskip}
+
+Erbert et al. \cite{erbert2017gerbil} introduced Gerbil, a parallel k-mer counting tool designed
+to improve performance and memory efficiency, particularly for larger k-mer lengths.
+Gerbil uses a two-stage approach that first partitions genomic sequence data into temporary
+files, then processes the resulting k-mers using hash tables. Unlike implementations that
+allocate a frequency array containing all $4^k$ possible k-mers, Gerbil uses hash tables to
+store the observed k-mers, allowing it to support larger k-mer lengths without requiring
+an exponentially sized dense frequency array.
+
+\vspace{\baselineskip}
+
+Gerbil also supports CUDA acceleration by distributing k-mer counting operations across GPU
+threads. The implementation maintains hash tables in GPU memory and uses atomic operations
+to coordinate concurrent updates. The authors emphasize the importance of memory access
+patterns, workload distribution, and GPU memory limitations when designing an efficient
+parallel counting algorithm. These considerations are relevant to this project, where CUDA
+uses atomic increments to update a shared frequency array. However, unlike Gerbil's
+hash-table approach, the CUDA implementation developed in this project uses a direct-indexed
+frequency array. This simplifies counter access but limits the practical k-mer length due
+to the exponential growth in memory requirements.
 
 %========================================================== Sequential Implementation
 
@@ -158,6 +179,15 @@ workload distribution, and I/O overhead, which are relevant considerations for t
 The initial sequential implementation was developed in C++ and tested using the Escherichia coli 
 K-12 MG1655 reference genome, obtained from the National Center for Biotechnology Information (NCBI).
 The reference genome contains 4,641,652 nucleotide bases and is provided in FASTA format \cite{ncbi_ecoli}.
+
+\vspace{\baselineskip}
+
+To evaluate performance on a larger genomic dataset, human chromosome 18 from the GRCh38
+reference genome was also used \cite{ucsc_chr18}. The chromosome contains approximately 80.4 million nucleotide
+positions, making it substantially larger than the E. coli reference genome. In addition,
+the chromosome contains ambiguous nucleotide positions represented by N, providing an
+opportunity to evaluate how the implementations handle invalid k-mer windows. Both datasets
+were used to benchmark the sequential, OpenMP, and CUDA implementations.
 
 \vspace{\baselineskip}
 
@@ -179,7 +209,8 @@ execution time of the counting algorithm to be measured independently of file in
 Each base is represented using a two-bit integer encoding, where A, C, G, and T correspond to the values
 0, 1, 2, and 3, respectively. Since each base requires two bits, a k-mer of length $k$ can be represented
 using $2k$ bits. The implementation then stores the encoded k-mer in an unsigned 64-bit integer using bit manipulation, 
-which allows a maximum k-mer length of $k=32$, although for testing purposes we have limited it to 12.
+which allows a maximum k-mer length of $k=32$. However, the dense frequency array requires $4^k$ counters, making memory 
+consumption the primary limitation on the supported k-mer length rather than the integer encoding itself.
 
 \vspace{\baselineskip}
 
@@ -200,17 +231,24 @@ The sequential algorithm processes each sequence using a sliding window of lengt
 constructing a new substring at every position, the implementation maintains an integer containing the
 encoded bases of the current window.
 
+\vspace{\baselineskip}
+
 For each new base, the encoded integer is shifted left by two bits, and the encoded value of the new
 nucleotide is inserted using a bitwise OR operation. A bitmask is then applied to remove any bits extending
 beyond the current k-mer, ensuring that only the most recent $k$ bases are retained.
+
+\vspace{\baselineskip}
 
 Once $k$ valid nucleotides have been processed, the resulting integer is used as an index into a frequency
 counting array. Each array entry stores the number of occurrences of its corresponding k-mer. This allows
 the frequency counts to be updated directly without requiring a hash table or additional lookup operations.
 
-The accuracy of the output is being verified by comparison to a python script \texttt{kmerCountVerify.py}. 
+\vspace{\baselineskip}
 
-\newpage
+The accuracy of the output was verified against an independent Python implementation that
+counts k-mer frequencies using string operations rather than the two-bit encoding method.
+
+\vspace{\baselineskip}
 
 \subsection{Time \& Memory Complexity}
 
@@ -250,35 +288,36 @@ which is likely why we see such a drop off in the performance, despite the seque
 
 \subsection{Correctness Verification}
 
-The correctness of the sequential implementation was verified against an independent Python
-implementation using the same E. Coli FASTA dataset. The Python implementation generates k-mers
-using string operations and counts their frequencies using the Counter data structure, rather
-than using the two-bit encoding and direct-indexed array of the C++ implementation.
+\vspace{\baselineskip}
+
+The sequential, OpenMP, and CUDA implementations were verified against an independent Python reference.
+The implementations were tested using the E. coli reference genome and human chromosome 18 datasets.
+For chromosome 18 at \(k=12\), both parallel implementations counted 80,089,048 valid k-mers, representing 
+11,177,170 unique k-mers. The frequency of every unique k-mer matched the Python reference, producing zero 
+mismatches for both implementations.
+
+\vspace{\baselineskip}
 
 Verification was performed for k-mer lengths of 3, 6, 9, and 12. For each configuration,
-the frequency of every unique k-mer was compared between the two implementations. All four
+the frequency of every unique k-mer was compared against the Python reference. All 
 configurations produced identical frequency distributions with zero mismatches, confirming
-the correctness of the sequential implementation for the tested dataset and k values.
+the correctness of each implementation for the tested configurations.
 
 %========================================================== Parallel Methodology
 \section{Parallelization Methodology}
 
 \vspace{\baselineskip}
 
-The objective of this project is to analyze the effects of parallelization on k-mer counting for genomic sequences. 
-The algorithm will then be written using OpenMP for parallelization on multiple CPU cores. Another implementation will utilize CUDA  
-for GPU parallelization. 
+The objective of this project is to analyze the effectiveness of CPU/GPU parallelization on k-mer counting for genomic sequences. 
+The algorithms were written using OpenMP for parallelization on multiple CPU cores and CUDA for GPU parallelization. 
 
 \vspace{\baselineskip}
 
 
-Experiments will vary the dataset size and k-mer length to evaluate the performance of both OpenMP and CUDA implementations.
-Both approaches will be compared against the sequential baseline in terms of execution time, speedup, and memory consumption.
-For OpenMP, the evaluation will examine the effects of thread count, scheduling, synchronization overhead, and the cost of
-combining thread-local frequency arrays. For CUDA, both GPU kernel execution time and total execution time will be measured,
-including host-to-device and device-to-host memory transfers. The results will be used to compare the scalability of each
-approach and determine under which conditions parallelization provides the greatest performance improvement.
-
+Both implementations were evaluated using the Escherichia coli reference genome and human chromosome 18, with k-mer lengths of 3, 6, 9, and 12. 
+Performance was measured across ten trials per configuration. The evaluation considers counting time, speedup relative to the sequential baseline, and memory usage. 
+OpenMP experiments examine thread scaling, thread-local frequency arrays, and merging overhead. CUDA experiments distinguish kernel execution time, warm-context counting time, 
+and cold-start counting time, allowing GPU initialization overhead to be evaluated separately.
 
 \vspace{\baselineskip}
 
@@ -289,9 +328,9 @@ approach and determine under which conditions parallelization provides the great
 
 \vspace{\baselineskip}
 
-The initial implementation will use OpenMP to distribute the k-mer counting workload across multiple CPU threads. The input sequences will be partitioned 
+The initial implementation uses OpenMP to distribute the k-mer counting workload across multiple CPU threads. The input sequences are partitioned 
 into smaller regions and then distributed across the threads to allow processing of different portions of the data. However, k-mers are generated using 
-overlapping windows, so we must account for the necessary overlap in between partitions. 
+overlapping windows, so the implementation accounts for the necessary overlap in between partitions. 
 
 \vspace{\baselineskip}
 
@@ -313,10 +352,37 @@ when a thread encounters a k-mer that does not belong to its partition, it inste
 
 \vspace{\baselineskip}
 
-The first two methods are simpler to implement, and provide useful comparisons between synchronization and memory overhead. The partitioned ownership 
-is more complex, but would provide an additional comparison by replacing conflicting shared updates with communication overhead. An initial implementation 
-using local counter arrays is planned, and then a more detailed attempt into the partitioned ownership method.
+Of the three approaches considered, the thread-local counter method was selected for the initial OpenMP implementation.
+This approach avoids synchronization during frequency updates by providing each thread with an independent counter array.
+Although this introduces additional memory overhead, it avoids contention on shared counters. The partitioned ownership approach remains a 
+potential direction for future optimization, particularly for larger k-mer lengths where the memory requirements of thread-local arrays become significant.
 
+\vspace{\baselineskip}
+
+The implemented algorithm divides each input sequence into blocks containing up to 65,536 k-mer starting positions.
+These blocks are distributed among CPU threads using OpenMP with static scheduling. Because adjacent k-mers overlap,
+each thread may read up to k-1 additional nucleotide bases beyond its assigned block boundary, ensuring that all
+valid k-mers are counted without duplicating starting positions.
+
+\vspace{\baselineskip}
+
+Each OpenMP thread maintains a private frequency array containing $4^k$ counters, initialized in parallel before
+the counting phase begins. Threads process their assigned blocks independently using the same two-bit encoding
+and sliding-window technique as the sequential implementation. This avoids race conditions because threads do
+not update a shared frequency array during counting.
+
+\vspace{\baselineskip}
+
+Once counting is complete, the private frequency arrays are merged into the global frequency array. The merging
+operation is parallelized by distributing ranges of counter indices among threads, ensuring that each output
+counter is updated by only one thread. This eliminates the need for atomic operations during the merging phase.
+
+\vspace{\baselineskip}
+
+The primary limitation of this implementation is memory consumption. Since each thread maintains a separate
+counter array, memory requirements increase approximately as $O(p4^k)$, where $p$ is the number of threads.
+At $k=12$, each private array requires 128 MiB, resulting in approximately 1 GiB of private counter storage
+when using eight threads.
 
 \vspace{\baselineskip}
 
@@ -326,34 +392,44 @@ using local counter arrays is planned, and then a more detailed attempt into the
 
 \vspace{\baselineskip}
 
-A second parallel implementation will use CUDA to perform k-mer counting on the GPU. Sequence data will be transferred from RAM into the device memory 
-of the GPU. The initial implementation will assign ranges of k-mer starting positions to GPU threads. Each thread will encode its assigned k-mers using the 
+A second parallel implementation uses CUDA to perform k-mer counting on the GPU. Sequence data is transferred from RAM into the device memory 
+of the GPU. The initial implementation assigns individual k-mer starting positions to GPU threads. Each thread encodes its assigned k-mers using the 
 same two bit representation as the sequential implementation. 
 
 \vspace{\baselineskip}
 
-The encoded k-mers resulting from this task will be used to index a frequency array stored in GPU global memory. This implementation will also have to 
-deal with race conditions or memory corruption. Atomic increments should also work for this implementation, similar to how they are planned for OpenMP. 
+The counting kernel uses a one-dimensional grid of thread blocks, with each thread processing one
+k-mer starting position. Each thread reads the following k nucleotide bases and constructs the
+encoded value using bitwise operations. Windows containing invalid nucleotides are skipped. Unlike
+the sequential implementation, which maintains a rolling encoding across consecutive positions,
+CUDA threads independently encode their assigned k-mers. This allows the counting workload to be
+distributed across many GPU threads.
 
 \vspace{\baselineskip}
 
-The CUDA implementation will be evaluated by measuring the execution time of the counting kernel separately from the time required to transfer sequence data 
-between the host and device memory. The initialization of the GPU count array and the transfer of the resulting frequencies back to host memory will also 
-be included when measuring total processing time. The effects of different k-mer lengths, dataset sizes, and GPU thread configurations will be
-evaluated to determine how these factors influence performance and memory utilization.
+The encoded k-mers resulting from this task are used to index a frequency array stored in GPU global memory. This implementation deals with race conditions 
+using atomic increments. 
 
+\vspace{\baselineskip}
+
+The CUDA implementation was evaluated by measuring the execution time of the counting kernel separately
+from the overall counting operation. GPU initialization was also measured independently to distinguish
+cold-start performance from warm-context performance. The warm-context measurement includes device
+memory allocation, host-to-device and device-to-host transfers, kernel execution, and cleanup, while
+the cold-start measurement additionally includes CUDA context initialization. Experiments evaluated
+different k-mer lengths and dataset sizes using a fixed configuration of 256 threads per block.
 
 \vspace{\baselineskip}
 
 \subsection{CPU \& Compiler Info}
 
-The sequential implementation was compiled using the GNU C++ compiler (g++) with the C++17
+The sequential and OpenMP implementations were compiled using the GNU C++ compiler (g++) with the C++17
 language standard and the -O2 optimization flag. This optimization level enables compiler
 optimizations intended to improve execution performance while retaining the same algorithmic
-behavior. The implementation was executed under AlmaLinux 9.6 within WSL2 on a Windows host.
-Each benchmark configuration was executed ten times to measure average execution time and
-the variation between trials.
-
+behavior. OpenMP was also compiled using the -fopenmp compiler flag. The CUDA implementation was compiled using 
+NVIDIA's CUDA compiler (nvcc) with C++17, the -O2 optimization flag, and the sm\_120 target architecture. All 
+implementations were executed under AlmaLinux 9.6 within WSL2 on a Windows host. Each benchmark configuration 
+was executed ten times to measure average execution time and the variation between trials.
 \begin{itemize}
     \item \textbf{CPU:} AMD Ryzen 7 7700 8-Core Processor
     \item \textbf{GCC:} g++ (GCC) 11.5.0 20240719 (Red Hat 11.5.0-14)
@@ -375,7 +451,7 @@ the variation between trials.
 
 \vspace{\baselineskip}
 
-\begin{table}[ht]
+\begin{table}[H]
     \centering
     \caption{GPU hardware specifications for CUDA experiments}
     \label{tab:gpu_specs}
@@ -394,7 +470,7 @@ the variation between trials.
 
 
 
-\begin{table}[ht]
+\begin{table}[H]
     \centering
     \caption{Dense k-mer frequency array memory requirements
     and feasibility on the NVIDIA GeForce RTX 5070}
@@ -422,6 +498,10 @@ the variation between trials.
 
 \vspace{\baselineskip}
 
+\subsection{Building and Running}
+
+\vspace{\baselineskip}
+
 \begin{center}
 \begin{tcolorbox}[
     colback=gray!8,
@@ -435,15 +515,36 @@ the variation between trials.
     bottom=8pt
 ]
 \ttfamily
-make
+\# Build all implementations
 
-\vspace{6pt}
+\vspace{6pt} 
+
+make all
+
+\vspace{12pt}
 
 ./scripts/benchmark.sh
 
 \vspace{6pt}
 
-./out <k-val> <FASTA\_file> [output\_counts.csv]
+\# Sequential
+\vspace{6pt}
+
+./sequential/out <k-val> <FASTA\_file> [output\_counts.csv]
+
+\vspace{12pt}
+
+\# OpenMP
+\vspace{6pt}
+
+./openMP/out <k> <FASTA\_file> <threads> [output\_counts.csv]
+
+\vspace{12pt}
+
+\# CUDA
+\vspace{6pt}
+
+./cuda/out <k> <FASTA\_file> [output\_counts.csv]
 
 \vspace{12pt}
 
@@ -455,11 +556,180 @@ make
 \end{tcolorbox}
 \end{center}
 
-\newpage
+\vspace{\baselineskip}
+
+\section{Experimental Results}
+
+\vspace{\baselineskip}
+
+\subsection{Performance Comparison}
+
+\vspace{\baselineskip}
+
+The sequential, OpenMP, and CUDA implementations were benchmarked using both the E. coli reference
+genome and human chromosome 18. Experiments were performed for k-mer lengths of 3, 6, 9, and 12,
+with ten trials conducted for each configuration. OpenMP was evaluated using 1, 2, 4, 8, and 16
+threads, while the CUDA implementation used a fixed configuration of 256 threads per block.
+
+\vspace{\baselineskip}
+
+Table~\ref{tab:benchmark_comparison} compares the mean counting times for the sequential implementation, the 
+fastest measured OpenMP configuration, and CUDA under cold-start and warm-context conditions. The OpenMP 
+results represent the thread configuration with the lowest mean counting time among the five configurations 
+evaluated (1, 2, 4, 8, and 16 threads). Consequently, the thread count varies between workloads. 
+
+\vspace{\baselineskip}
+
+\FloatBarrier
+
+\input{../source/results/midterm/benchmark_comparison.tex}
+
+\FloatBarrier
+
+\vspace{\baselineskip}
+
+Although increasing the number of threads generally improves parallel counting performance, the additional 
+memory allocation and merging overhead can outweigh these benefits, particularly at larger k-mer lengths. At 
+$k=12$, each thread requires a private 128 MiB frequency array, resulting in significantly greater memory consumption 
+as the thread count increases. This helps explain why configurations with fewer threads achieved better overall counting 
+times for some workloads.
+
+\vspace{\baselineskip}
+
+\subsection{CUDA Timing Analysis}
+
+\vspace{\baselineskip}
+
+The CUDA implementation demonstrated a significant difference between cold-start and warm-context performance.
+As shown in Table~\ref{tab:benchmark_comparison}, CUDA initialization introduces substantial overhead,
+particularly for smaller datasets and k-mer lengths. For the E. coli dataset, the initialization cost
+generally exceeded the time required by the sequential implementation to complete the counting operation.
+
+\vspace{\baselineskip}
+
+However, when CUDA initialization is excluded, the GPU implementation becomes more competitive.
+For human chromosome 18 at $k=12$, the sequential implementation required an average of 680.26 ms,
+while CUDA required 241.53 ms under cold-start conditions and 43.99 ms with an initialized context.
+These measurements correspond to speedups of approximately 2.82 and 15.46, respectively.
+
+\vspace{\baselineskip}
+
+To better understand this difference, Table~\ref{tab:cuda_timing} separates CUDA initialization,
+kernel execution, warm-context counting, and cold-start counting times.
+
+\vspace{\baselineskip}
+
+\input{../source/results/midterm/cuda_timing_table.tex}
+
+\vspace{\baselineskip}
+
+\subsection{Sequential, OpenMP, and CUDA Performance Comparison}
+
+\vspace{\baselineskip}
+
+The experimental results demonstrate that the effectiveness of parallelization depends on both the
+dataset size and k-mer length. For the E. coli dataset, the sequential implementation generally
+outperformed OpenMP and cold-start CUDA. The smaller input size limits the benefits of parallel
+execution, as the overhead associated with thread management, memory allocation, and GPU
+initialization becomes significant relative to the counting workload.
+
+\vspace{\baselineskip}
+
+For human chromosome 18, OpenMP provided improved performance over the sequential implementation
+across all tested k-mer lengths. At $k=12$, the sequential implementation required an average of
+680.26 ms, while the fastest OpenMP configuration required 381.61 ms using four threads. This
+corresponds to a speedup of approximately 1.78. However, the additional memory required for
+thread-local counter arrays reduced the benefits of increasing the thread count beyond four.
+
+\vspace{\baselineskip}
+
+CUDA demonstrated the greatest performance improvement for chromosome 18 at $k=12$. The
+warm-context implementation achieved a speedup of approximately 15.46 compared with the sequential
+baseline, while cold-start CUDA achieved a speedup of approximately 2.82. These results demonstrate
+that GPU acceleration can provide substantial improvements for larger counting workloads, but
+initialization overhead can significantly affect performance when processing smaller datasets.
+
+\vspace{\baselineskip}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]
+    {../source/results/midterm/figures/chr18/chr18.fa\_speedup.png}
+    \caption{OpenMP counting speedup relative to the sequential
+    implementation for chromosome 18 across different thread counts
+    and k-mer lengths.}
+    \label{fig:openmp_speedup}
+\end{figure}
+
+\vspace{\baselineskip}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]
+    {../source/results/midterm/figures/chr18/chr18.fa\_cuda\_speedup.png}
+    \caption{CUDA counting speedup relative to the sequential
+    implementation for chromosome 18, comparing cold-start
+    execution with an initialized CUDA context.}
+    \label{fig:cuda_speedup}
+\end{figure}
+
+\vspace{\baselineskip}
+
+Although the experimental evaluation was limited to k-mer lengths of 12 or less, the CUDA implementation may provide 
+additional performance benefits at larger k-mer lengths. As shown in Table~\ref{tab:gpu_kmer_memory}, the NVIDIA 
+GeForce RTX 5070 has sufficient global memory to accommodate dense frequency arrays for k-mer lengths of 13 and 14, 
+requiring approximately 512 MiB and 2 GiB, respectively. A length of 15 would require approximately 8 GiB, which may 
+also be feasible depending on additional GPU memory requirements.
+
+\vspace{\baselineskip}
+
+Increasing k further increases the size of the frequency array, potentially making memory initialization and random-access 
+frequency updates more expensive for the sequential implementation. GPU parallelism may help reduce the associated counting 
+overhead, although larger arrays also introduce additional memory-bandwidth and allocation costs. Consequently, the performance 
+benefits observed at $k=12$ cannot necessarily be extrapolated to larger values without further testing. Evaluating k-mer lengths 
+beyond 12 is therefore a potential direction for future testing.
+
+\vspace{\baselineskip}
+
+\section{Conclusion}
+
+This project evaluated the effectiveness of CPU and GPU parallelization for k-mer counting in genomic
+sequences. Three implementations were developed using sequential C++, OpenMP, and CUDA, and their
+performance was compared across two genomic datasets and four k-mer lengths. All three implementations
+were validated against an independent Python reference, confirming the correctness of the frequency
+counts for the tested configurations.
+
+\vspace{\baselineskip}
+
+The experimental results demonstrate that parallelization does not always guarantee improved performance.
+For smaller datasets, the sequential implementation generally performed better due to the additional
+overhead introduced by parallel execution. OpenMP demonstrated improvements on the larger chromosome 18
+dataset, although its performance was limited by the memory requirements of thread-local frequency arrays
+and the overhead associated with merging their results.
+
+\vspace{\baselineskip}
+
+CUDA demonstrated the greatest performance improvement for larger workloads. For chromosome 18 at
+$k=12$, CUDA achieved a speedup of approximately 2.82 under cold-start conditions and 15.46 with an
+initialized CUDA context. These results highlight the importance of distinguishing GPU kernel execution
+from the additional costs of initialization, memory allocation, and data transfers when evaluating
+parallel performance.
+
+\vspace{\baselineskip}
+
+Overall, the results suggest that the effectiveness of parallel k-mer counting depends on the dataset size,
+k-mer length, memory requirements, and parallelization strategy. Future work will investigate larger
+k-mer lengths, alternative OpenMP memory management approaches, and additional CUDA configurations
+to determine whether the observed performance improvements can be maintained as computational and
+memory requirements increase.
+
+\vspace{\baselineskip}
 
 %========================================================== Document End
 
-\bibliographystyle{plain}
+\clearpage
+
+\bibliographystyle{IEEEtran}
 \bibliography{references}
 
 \end{document}
