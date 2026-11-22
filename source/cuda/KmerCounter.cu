@@ -34,18 +34,6 @@ void KmerCounter::countCuda()
 
     try {
 
-        auto initStart = std::chrono::steady_clock::now();
-
-        checkCuda(cudaSetDevice(0));
-
-        auto initEnd = std::chrono::steady_clock::now();
-
-        std::chrono::duration<double> initTime = initEnd - initStart;
-
-        std::cout << "CUDA initialization time: "
-                << initTime.count()
-                << " seconds\n";
-
         auto allocStart = std::chrono::steady_clock::now();
 
         // Allocate GPU frequency array

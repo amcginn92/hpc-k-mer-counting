@@ -2,6 +2,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <fstream>
+#include <cuda_runtime.h>
 
 #include "KmerCounter.h"
 
@@ -24,16 +25,28 @@ int main(int argc, char** argv){
     
     counter.loadFasta(argv[2]);
 
+    // Measure CUDA initialization separately
+    auto initStart = std::chrono::steady_clock::now();
+
+    cudaError_t status = cudaSetDevice(0);
+    if (status != cudaSuccess) {
+        std::cerr << "CUDA initialization failed: "
+                << cudaGetErrorString(status) << "\n";
+        return 1;
+    }
+
+    auto initEnd = std::chrono::steady_clock::now();
+
     auto start = std::chrono::steady_clock::now();
 
     counter.countCuda();
 
     auto end = std::chrono::steady_clock::now();
 
-    std::chrono::duration<double> elapsedCount = end - start;
-
+    std::chrono::duration<double> elapsedCount = end - initStart;
+    std::chrono::duration<double> elapsedWarm = end - start;
+    std::chrono::duration<double> elapsedInit = initEnd - initStart;
     std::chrono::duration<double> elapsedFull = end - startFull;
-
 
     std::cout << "Total processing time: "
             << elapsedFull.count()
@@ -42,6 +55,12 @@ int main(int argc, char** argv){
     std::cout << "Count time: "
             << elapsedCount.count()
             << " seconds\n";
+
+    std::cout << "Warm count time: "
+          << elapsedWarm.count() << " seconds\n";
+
+    std::cout << "CUDA initialization time: "
+          << elapsedInit.count() << " seconds\n";
 
 
     if(argc == 4){
